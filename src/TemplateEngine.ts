@@ -1,8 +1,6 @@
 import fs from "fs";
 import { Response } from "express";
 
-const MAX_OBJECT_DEPTH = 10;
-
 enum NodeTypes {
     LITERAL,
     VAR,
@@ -15,7 +13,8 @@ type LiteralNode = {
 
 type VarNode = {
     type: NodeTypes.VAR;
-    path: string[];
+    // this stores all the indexes in order. "foo.bar[2]" will output ["foo", "bar", "2"]
+    keys: string[];
 };
 
 type TemplateNode = LiteralNode | VarNode;
@@ -26,8 +25,9 @@ type TemplateView = (args: TemplateViewArgs) => string;
 // FORMAL GRAMMAR
 // Expression = "{{" Spaces Variable Spaces "}}"
 // Spaces = " "+
-// Variable = VarName ("." VarName)?
+// Variable = VarName (("." VarName) | ("[" Number+ "]"))?
 // VarName = [A-Za-z_$] [A-Za-z_$0-9]+
+// Number [0-9]
 
 class Lexer {
     private buffer: string;
@@ -58,10 +58,13 @@ class Lexer {
         return false;
     }
 
+    public isNextNumber(): boolean {
+        return /[0-9]/.test(this.peek());
+    }
+
     public skipSpaces(): void {
         while(this.match(" "));
     }
-
 
     public setCursorPos(pos: number): void {
         this.cursor = pos;
@@ -107,29 +110,50 @@ class Parser {
         }
     }
 
+    private getVariableKey(): string | null {
+        if(!/[A-Za-z_$]/.test(this.lexer.peek())) return null;
+
+        let key = "";
+        key = this.lexer.advance();
+
+        while(/[A-Za-z_$0-9]/.test(this.lexer.peek())) {
+            key += this.lexer.advance();
+        }
+
+        return key;
+    }
+
     private variable(): VarNode | null {
-        const varPath: string[] = [];
+        const varKeys: string[] = [];
 
-        let pathIndex = 0;
-        while(pathIndex < MAX_OBJECT_DEPTH) {
-            if(pathIndex > 0) {
-                if(!this.lexer.match(".")) break;
+        const varKey = this.getVariableKey();
+        if(varKey === null) return null;
+        varKeys.push(varKey);
+
+        let c = this.lexer.peek();
+        while(c === "." || c === "[") {
+            if(this.lexer.match(".")) {
+                const varKey = this.getVariableKey();
+                if(varKey === null) return null;
+                varKeys.push(varKey);
+            } else if(this.lexer.match("[")) {
+                let varKey = "";
+
+                while(this.lexer.isNextNumber()) {
+                    varKey += this.lexer.advance();
+                }
+
+                if(!this.lexer.match("]")) return null;
+
+                varKeys.push(varKey);
             }
 
-            if(!/[A-Za-z_$]/.test(this.lexer.peek())) return null;
-
-            varPath[pathIndex] = this.lexer.advance();
-
-            while(/[A-Za-z_$0-9]/.test(this.lexer.peek())) {
-                varPath[pathIndex] += this.lexer.advance();
-            }
-
-            pathIndex++;
+            c = this.lexer.peek();
         }
 
         return {
             type: NodeTypes.VAR,
-            path: varPath,
+            keys: varKeys,
         };
     }
 
@@ -202,25 +226,31 @@ class TemplateEngine {
         let currentPath = "";
         let currentObj: any = args;
 
-        for(let i = 0; i < node.path.length; i++) {
-            const name = node.path[i];
+        for(let i = 0; i < node.keys.length; i++) {
+            const key = node.keys[i];
 
             if(typeof currentObj !== "object") {
-                console.error(`[ERROR] Can't use "${name}" in "${currentPath}" since "${currentPath}" is a "${typeof currentObj}"`);
+                console.error(`[ERROR] "${key}" can't be found in "${currentPath}"`);
                 return "undefined";
             }
 
             if(i > 0) {
-                currentPath += `.${name}`;
+                // if the "key" starts with a number, it means it's an index
+                if(/[0-9]/.test(key[0])) {
+                    currentPath += `[${key}]`;
+                } else {
+                    currentPath += `.${key}`;
+                }
             } else {
-                currentPath = name;
+                currentPath = key;
             }
 
-            if(currentObj[name] !== undefined) {
-                if(i === node.path.length - 1) {
-                    return currentObj[name].toString();
+            if(currentObj[key] !== undefined) {
+                // if it's the last key we return it's value stringified
+                if(i === node.keys.length - 1) {
+                    return currentObj[key].toString();
                 } else {
-                    currentObj = currentObj[name];
+                    currentObj = currentObj[key];
                 }
             } else {
                 console.error(`[ERROR] "${currentPath}" is undefined`);

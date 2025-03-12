@@ -11,6 +11,7 @@ router.get("/", (req, res) => {
         hello: "HELLO",
         obj: {
             message: "<h1>UwU</h1>",
+            array: ["hello", { msg: "message" }]
         }
     });
 });
