@@ -3,6 +3,8 @@ import path from "path";
 import fs from "fs";
 import sass from "sass";
 
+import TemplateEngine from "./TemplateEngine";
+
 import routes from "./routes";
 
 const app = express();
@@ -10,6 +12,7 @@ const port = 3000;
 
 const publicDir = path.resolve(__dirname, "../public/");
 const sassDir = path.resolve(__dirname, "./scss/");
+const viewsDir = path.resolve(__dirname, "./views/");
 
 app.use(express.static(publicDir));
 
@@ -41,6 +44,13 @@ async function main() {
     if(!await compileSass()) {
         process.exit(1);
     }
+
+    await TemplateEngine.init({
+        views: {
+            home: path.resolve(viewsDir, "home.html"),
+        },
+        debug: true,
+    });
 
     app.use(routes);
 

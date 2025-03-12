@@ -1,18 +1,12 @@
 import { Router } from "express";
 
-import { sendView, compileView } from "./template";
-import homeView from "./views/home";
+import TemplateEngine from "./TemplateEngine";
 
 const router = Router();
 
-router.get("/", (_, res) => {
-    sendView(res, homeView(["Hello", "Bye", "Bye2"]));
-});
-
-router.get("/test", async (req, res) => {
-    const testView = await compileView();
+router.get("/", (req, res) => {
     const $title = req.query.title || "Default Title";
-    sendView(res, testView({ $title: $title }));
+    TemplateEngine.sendView(res, "home", { $title, hello: "HELLO" });
 });
 
 export default router;
