@@ -1,6 +1,8 @@
 import fs from "fs";
 import { Response } from "express";
 
+const MAX_OBJECT_DEPTH = 10;
+
 enum NodeTypes {
     LITERAL,
     VAR,
@@ -13,13 +15,19 @@ type LiteralNode = {
 
 type VarNode = {
     type: NodeTypes.VAR;
-    name: string;
+    path: string[];
 };
 
 type TemplateNode = LiteralNode | VarNode;
 
 type TemplateViewArgs = any;
 type TemplateView = (args: TemplateViewArgs) => string;
+
+// FORMAL GRAMMAR
+// Expression = "{{" Spaces Variable Spaces "}}"
+// Spaces = " "+
+// Variable = VarName ("." VarName)?
+// VarName = [A-Za-z_$] [A-Za-z_$0-9]+
 
 class Lexer {
     private buffer: string;
@@ -99,29 +107,45 @@ class Parser {
         }
     }
 
+    private variable(): VarNode | null {
+        const varPath: string[] = [];
+
+        let pathIndex = 0;
+        while(pathIndex < MAX_OBJECT_DEPTH) {
+            if(pathIndex > 0) {
+                if(!this.lexer.match(".")) break;
+            }
+
+            if(!/[A-Za-z_$]/.test(this.lexer.peek())) return null;
+
+            varPath[pathIndex] = this.lexer.advance();
+
+            while(/[A-Za-z_$0-9]/.test(this.lexer.peek())) {
+                varPath[pathIndex] += this.lexer.advance();
+            }
+
+            pathIndex++;
+        }
+
+        return {
+            type: NodeTypes.VAR,
+            path: varPath,
+        };
+    }
+
     private expression(): boolean {
         if(!this.lexer.match("{") || !this.lexer.match("{")) return false;
 
         this.lexer.skipSpaces();
 
-        let varName = "";
-
-        if(!/[A-Za-z_$]/.test(this.lexer.peek())) return false;
-
-        varName += this.lexer.advance();
-
-        while(/[A-Za-z_$0-9]/.test(this.lexer.peek())) {
-            varName += this.lexer.advance();
-        }
+        const node = this.variable();
+        if(node === null) return false;
 
         this.lexer.skipSpaces();
 
         if(!this.lexer.match("}") || !this.lexer.match("}")) return false;
 
-        this.nodes.push({
-            type: NodeTypes.VAR,
-            name: varName,
-        });
+        this.nodes.push(node);
         return true;
     }
 
@@ -174,6 +198,39 @@ class TemplateEngine {
         return (args) => this.compileNodes(templateNodes, args);
     }
 
+    private compileVariable(node: VarNode, args: TemplateViewArgs): string {
+        let currentPath = "";
+        let currentObj: any = args;
+
+        for(let i = 0; i < node.path.length; i++) {
+            const name = node.path[i];
+
+            if(typeof currentObj !== "object") {
+                console.error(`[ERROR] Can't use "${name}" in "${currentPath}" since "${currentPath}" is a "${typeof currentObj}"`);
+                return "undefined";
+            }
+
+            if(i > 0) {
+                currentPath += `.${name}`;
+            } else {
+                currentPath = name;
+            }
+
+            if(currentObj[name] !== undefined) {
+                if(i === node.path.length - 1) {
+                    return currentObj[name].toString();
+                } else {
+                    currentObj = currentObj[name];
+                }
+            } else {
+                console.error(`[ERROR] "${currentPath}" is undefined`);
+                return "undefined";
+            }
+        }
+
+        return "undefined";
+    }
+
     private compileNodes(nodes: TemplateNode[], args: TemplateViewArgs): string {
         let res = "";
         for(const node of nodes) {
@@ -182,12 +239,7 @@ class TemplateEngine {
                     res += node.contents;
                 } break;
                 case NodeTypes.VAR: {
-                    if(node.name in args) {
-                        res += args[node.name].toString();
-                    } else {
-                        res += "undefined";
-                        console.error(`[ERROR] "${node.name}" variable wasn't provided`);
-                    }
+                    res += this.compileVariable(node, args);
                 } break;
             }
         }
