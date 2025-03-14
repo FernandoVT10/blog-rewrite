@@ -2,8 +2,7 @@ import fs from "fs";
 import { Response } from "express";
 
 enum NodeTypes {
-    LITERAL,
-    VAR,
+    LITERAL, VAR, IF, UNARY, BINARY
 };
 
 type LiteralNode = {
@@ -17,39 +16,121 @@ type VarNode = {
     keys: string[];
 };
 
-type TemplateNode = LiteralNode | VarNode;
+type UnaryNode = {
+    type: NodeTypes.UNARY;
+    value: VarNode | number | string;
+    negated: boolean;
+};
+
+enum Operators {
+    EQUAL, NOT_EQUAL, GREATHER, LESS,
+    GREATHER_OR_EQ, LESS_OR_EQ, AND
+};
+
+type BinaryNode = {
+    type: NodeTypes.BINARY;
+    operator: Operators;
+    left: LogicExpr;
+    right: LogicExpr;
+};
+
+type LogicExpr = UnaryNode | BinaryNode;
+
+type IfNode = {
+    type: NodeTypes.IF;
+    condition: LogicExpr;
+    nodes: TemplateNode[];
+};
+
+type TemplateNode = LiteralNode | VarNode | IfNode;
 
 type TemplateViewArgs = any;
 type TemplateView = (args: TemplateViewArgs) => string;
 
 // FORMAL GRAMMAR
-// Expression = "{{" Spaces Variable Spaces "}}"
-// Spaces = " "+
+// Expr = If | OpenExpr Variable CloseExpr
 // Variable = VarName (("." VarName) | ("[" Number+ "]"))?
 // VarName = [A-Za-z_$] [A-Za-z_$0-9]+
+//
+// If = IfStart Literal IfEnd
+// IfStart = OpenExpr "if" Spaces "(" Spaces Condition Spaces ")" CloseExpr
+// IfStart = OpenExpr "endif" CloseExpr
+// LogicExpr = Bynary | Unary
+// Binary = (Binary | Unary) Operation (Binary | Unary)
+// Operation = "==" | ">" | "<" | ">=" | "<=" | "!="
+// Unary = "!"? (Variable | String | Number)
+// String = "\"" * "\""
 // Number [0-9]
+//
+// OpenExpr = "{{" Spaces
+// CloseExpr = Spaces "}}"
+// Spaces = " "+
+// Literal = !OpenExpr *
 
-class Lexer {
+enum TokenType {
+    LITERAL,
+    OPEN_EXPR, CLOSE_EXPR, // "{{" and "}}"
+    OPEN_BRACKET, CLOSE_BRACKET, // "[" and "]"
+    OPEN_PAREN, CLOSE_PAREN, // "(" and ")"
+    IDENTIFIER,
+    DOT,
+    NUMBER,
+    IF,
+    ENDIF,
+    BANG, // "!"
+    DOUBLE_EQUAL, BANG_EQUAL, // "==" and "!="
+    GREATHER, LESS, // ">" and "<"
+    GREATHER_OR_EQ, LESS_OR_EQ, // ">=" and "<="
+    STRING,
+    DOUBLE_AND, // "&&"
+};
+
+type Token = {
+    type: TokenType;
+    lexeme: string;
+    line: number;
+    column: number
+};
+
+const TokenAndOperators = new Map<TokenType, Operators>();
+TokenAndOperators.set(TokenType.DOUBLE_EQUAL, Operators.EQUAL);
+TokenAndOperators.set(TokenType.BANG_EQUAL, Operators.NOT_EQUAL);
+TokenAndOperators.set(TokenType.GREATHER, Operators.GREATHER);
+TokenAndOperators.set(TokenType.LESS, Operators.LESS);
+TokenAndOperators.set(TokenType.GREATHER_OR_EQ, Operators.GREATHER_OR_EQ);
+TokenAndOperators.set(TokenType.LESS_OR_EQ, Operators.LESS_OR_EQ);
+TokenAndOperators.set(TokenType.DOUBLE_AND, Operators.AND);
+
+export class Lexer {
     private buffer: string;
     private cursor = 0;
+    private line = 0;
+    private column = 0;
+    private tokens: Token[] = [];
+    private keywords: Map<string, TokenType> = new Map;
 
     constructor(buffer: string) {
         this.buffer = buffer;
+        this.keywords.set("if", TokenType.IF);
+        this.keywords.set("endif", TokenType.ENDIF);
     }
 
-    public isAtTheEnd(): boolean {
+    private isAtTheEnd(): boolean {
         return this.cursor >= this.buffer.length;
     }
 
-    public advance(): string {
+    private advance(): string {
+        this.column++;
+
+        if(this.buffer[this.cursor] == "\n") {
+            this.column = 0;
+            this.line = 0;
+        }
+
         return this.buffer[this.cursor++];
     }
 
-    public peek(): string {
-        return this.buffer[this.cursor];
-    }
-
-    public match(c: string): boolean {
+    private match(c: string): boolean {
         if(this.peek() === c) {
             this.advance();
             return true;
@@ -58,131 +139,336 @@ class Lexer {
         return false;
     }
 
-    public isNextNumber(): boolean {
-        return /[0-9]/.test(this.peek());
+    private peek(): string {
+        return this.buffer[this.cursor];
     }
 
-    public skipSpaces(): void {
-        while(this.match(" "));
+    private addToken(type: TokenType, lexeme = ""): void {
+        this.tokens.push({ type, lexeme, line: this.line, column: this.column });
     }
 
-    public setCursorPos(pos: number): void {
-        this.cursor = pos;
+    private identifier(c: string): void {
+        let lexeme = c;
+        while(/[A-Za-z$_0-9]/.test(this.peek()))
+            lexeme += this.advance();
+
+        const type = this.keywords.get(lexeme);
+
+        if(type === undefined) {
+            this.addToken(TokenType.IDENTIFIER, lexeme);
+        } else {
+            this.addToken(type);
+        }
     }
 
-    public getCursorPos(): number {
-        return this.cursor;
+    private number(c: string): void {
+        let lexeme = c;
+        while(/[0-9]/.test(this.peek()))
+            lexeme += this.advance();
+        this.addToken(TokenType.NUMBER, lexeme);
     }
 
-    public getBufferSlice(start: number, end: number): string {
-        return this.buffer.slice(start, end);
+    private string(): void {
+        let lexeme = "";
+        while(this.peek() !== '"' && !this.isAtTheEnd())
+            lexeme += this.advance();
+
+        if(!this.match('"')) {
+            throw new Error("Not closing string found");
+        }
+
+        this.addToken(TokenType.STRING, lexeme);
+    }
+
+    private scanExpr(): void {
+        while(this.peek() !== "}" && this.peek() !== "\n") {
+            const c = this.advance();
+
+            switch(c) {
+                case ".": this.addToken(TokenType.DOT); break;
+                case "[": this.addToken(TokenType.OPEN_BRACKET); break;
+                case "]": this.addToken(TokenType.CLOSE_BRACKET); break;
+                case "(": this.addToken(TokenType.OPEN_PAREN); break;
+                case ")": this.addToken(TokenType.CLOSE_PAREN); break;
+                case "!":
+                    this.addToken(this.match("=") ? TokenType.BANG_EQUAL : TokenType.BANG);
+                    break;
+                case "=":
+                    if(this.match("=")) {
+                        this.addToken(TokenType.DOUBLE_EQUAL);
+                    } else {
+                        throw new Error("Unexpected character");
+                    }
+
+                    break;
+                case ">":
+                    this.addToken(
+                        this.match("=") ? TokenType.GREATHER_OR_EQ : TokenType.GREATHER
+                    );
+                    break;
+                case "<":
+                    this.addToken(
+                        this.match("=") ? TokenType.LESS_OR_EQ : TokenType.LESS
+                    );
+                    break;
+                case "\"": this.string(); break;
+                case "&":
+                    if(this.match("&")) {
+                        this.addToken(TokenType.DOUBLE_AND);
+                    } else {
+                        throw new Error("Unexpected character");
+                    }
+                    break;
+                // ignore spaces
+                case " ": break;
+                default: {
+                    if(/[0-9]/.test(c)) {
+                        this.number(c);
+                    } else if(/[A-Za-z$_]/.test(c)) {
+                        this.identifier(c);
+                    } else {
+                        throw new Error("Unexpected character");
+                    }
+                }
+            }
+        }
+
+        if(this.match("}") && this.match("}")) {
+            this.addToken(TokenType.CLOSE_EXPR);
+        }
+    }
+
+    private scanLiteral(c: string): void {
+        let token: Token;
+        const len = this.tokens.length;
+        if(len > 0 && this.tokens[len - 1].type === TokenType.LITERAL) {
+            token = this.tokens[this.tokens.length - 1];
+        } else {
+            this.addToken(TokenType.LITERAL, "");
+            token = this.tokens[this.tokens.length - 1];
+        }
+
+        token.lexeme += c;
+
+        while(this.peek() !== "{" && !this.isAtTheEnd()) {
+            token.lexeme += this.advance();
+        }
+    }
+
+    public scanTokens(): Token[] {
+        while(!this.isAtTheEnd()) {
+            let c = this.advance();
+
+            if(c === "{" && this.match("{")) {
+                this.addToken(TokenType.OPEN_EXPR);
+                this.scanExpr();
+            } else {
+                this.scanLiteral(c);
+            }
+        }
+
+        return this.tokens;
     }
 }
 
-class Parser {
-    private lexer: Lexer;
+export class Parser {
+    private tokens: Token[];
 
-    private nodes: TemplateNode[] = [];
+    private cursor = 0;
 
-    constructor(buffer: string) {
-        this.lexer = new Lexer(buffer);
+    constructor(tokens: Token[]) {
+        this.tokens = tokens;
     }
 
-    // if the last node is literal this returns it else it creates a new one and returns it
-    private getOrCreateLiteralNode(): LiteralNode {
-        const len = this.nodes.length;
-        if(len === 0 || this.nodes[len - 1].type !== NodeTypes.LITERAL) {
-            this.nodes.push({
-                type: NodeTypes.LITERAL,
-                contents: "",
-            });
-        }
-        return this.nodes[this.nodes.length - 1] as LiteralNode;
+    private isAtTheEnd(): boolean {
+        return this.cursor >= this.tokens.length;
     }
 
-    // this function always consumes at least one char
-    private literal(): void {
-        const node = this.getOrCreateLiteralNode();
-
-        node.contents += this.lexer.advance();
-        while(this.lexer.peek() !== "{" && !this.lexer.isAtTheEnd()) {
-            node.contents += this.lexer.advance();
-        }
+    private advance(): Token {
+        return this.tokens[this.cursor++];
     }
 
-    private getVariableKey(): string | null {
-        if(!/[A-Za-z_$]/.test(this.lexer.peek())) return null;
+    private isNextToken(type: TokenType, offset = 0): boolean {
+        return this.tokens[this.cursor + offset].type === type;
+    }
 
-        let key = "";
-        key = this.lexer.advance();
+    private matchToken(type: TokenType): boolean {
+        if(this.isAtTheEnd()) return false;
 
-        while(/[A-Za-z_$0-9]/.test(this.lexer.peek())) {
-            key += this.lexer.advance();
+        if(this.isNextToken(type)) {
+            this.advance();
+            return true;
         }
 
-        return key;
+        return false;
     }
 
-    private variable(): VarNode | null {
-        const varKeys: string[] = [];
+    private peekToken(): Token {
+        return this.tokens[this.cursor];
+    }
 
-        const varKey = this.getVariableKey();
-        if(varKey === null) return null;
-        varKeys.push(varKey);
+    private variable(): VarNode {
+        const keys: string[] = [];
+        keys.push(this.advance().lexeme);
 
-        let c = this.lexer.peek();
-        while(c === "." || c === "[") {
-            if(this.lexer.match(".")) {
-                const varKey = this.getVariableKey();
-                if(varKey === null) return null;
-                varKeys.push(varKey);
-            } else if(this.lexer.match("[")) {
-                let varKey = "";
+        while(this.isNextToken(TokenType.DOT) || this.isNextToken(TokenType.OPEN_BRACKET)) {
+            const prevToken = this.advance();
 
-                while(this.lexer.isNextNumber()) {
-                    varKey += this.lexer.advance();
+            if(prevToken.type === TokenType.DOT) {
+                if(!this.isNextToken(TokenType.IDENTIFIER)) {
+                    throw new Error("Invalid syntax");
                 }
 
-                if(!this.lexer.match("]")) return null;
+                keys.push(this.advance().lexeme);
+            } else if(prevToken.type === TokenType.OPEN_BRACKET) {
+                if(!this.isNextToken(TokenType.NUMBER)) {
+                    throw this.parseError("Expected number", this.advance());
+                }
 
-                varKeys.push(varKey);
+                keys.push(this.advance().lexeme);
+
+                if(!this.matchToken(TokenType.CLOSE_BRACKET)) {
+                    throw new Error("Invalid syntax");
+                }
+            } else {
+                throw new Error("Invalid syntax");
             }
-
-            c = this.lexer.peek();
         }
 
         return {
             type: NodeTypes.VAR,
-            keys: varKeys,
+            keys,
         };
     }
 
-    private expression(): boolean {
-        if(!this.lexer.match("{") || !this.lexer.match("{")) return false;
+    private unary(): UnaryNode {
+        let negated = false;
 
-        this.lexer.skipSpaces();
-
-        const node = this.variable();
-        if(node === null) return false;
-
-        this.lexer.skipSpaces();
-
-        if(!this.lexer.match("}") || !this.lexer.match("}")) return false;
-
-        this.nodes.push(node);
-        return true;
-    }
-
-    public parse(): TemplateNode[] {
-        while(!this.lexer.isAtTheEnd()) {
-            const initialPos = this.lexer.getCursorPos();
-            if(this.expression()) continue;
-
-            this.lexer.setCursorPos(initialPos);
-            this.literal();
+        if(this.matchToken(TokenType.BANG)) {
+            negated = true;
         }
 
-        return this.nodes;
+        let value: UnaryNode["value"];
+
+        if(this.isNextToken(TokenType.NUMBER)) {
+            value = parseInt(this.advance().lexeme);
+        } else if(this.isNextToken(TokenType.STRING)) {
+            value = this.advance().lexeme;
+        } else {
+            value = this.variable();
+        }
+
+        return {
+            type: NodeTypes.UNARY,
+            value,
+            negated,
+        };
+    }
+
+    private binary(left: LogicExpr): BinaryNode {
+        const operator = TokenAndOperators.get(this.advance().type) as Operators;
+        const right = this.unary();
+
+        return {
+            type: NodeTypes.BINARY,
+            operator,
+            left,
+            right,
+        };
+    }
+
+    private condition(): LogicExpr {
+        let expr: LogicExpr = this.unary();
+
+        while(TokenAndOperators.has(this.peekToken().type)) {
+            expr = this.binary(expr);
+        }
+
+        return expr;
+    }
+
+    private ifStatement(): IfNode {
+        this.matchToken(TokenType.IF);
+
+        if(!this.matchToken(TokenType.OPEN_PAREN)) {
+            throw this.parseError(`Expected "("`, this.peekToken());
+        }
+
+        const condition = this.condition();
+
+        if(!this.matchToken(TokenType.CLOSE_PAREN)) {
+            throw this.parseError(`Expected ")"`, this.peekToken());
+        }
+
+        if(!this.matchToken(TokenType.CLOSE_EXPR)) {
+            throw this.parseError(`Expected "}}"`, this.peekToken());
+        }
+
+        const nodes = this.parse(() => {
+            return !(this.isNextToken(TokenType.OPEN_EXPR) && this.isNextToken(TokenType.ENDIF, 1));
+        });
+
+        if(!this.matchToken(TokenType.OPEN_EXPR) || !this.matchToken(TokenType.ENDIF)) {
+            throw this.parseError("endif expected");
+        }
+
+        return {
+            type: NodeTypes.IF,
+            condition,
+            nodes,
+        };
+    }
+
+    public parse(predicate?: () => boolean): TemplateNode[] {
+        const nodes: TemplateNode[] = [];
+
+        while(!this.isAtTheEnd()) {
+            if(predicate && !predicate()) {
+                return nodes;
+            }
+
+            const token = this.advance();
+
+            switch(token.type) {
+                case TokenType.LITERAL: {
+                    nodes.push({
+                        type: NodeTypes.LITERAL,
+                        contents: token.lexeme,
+                    });
+                } break;
+                case TokenType.OPEN_EXPR: {
+                    const nextToken = this.peekToken();
+
+                    switch(this.peekToken().type) {
+                        case TokenType.IDENTIFIER:
+                            nodes.push(this.variable());
+                            break;
+                        case TokenType.IF:
+                            nodes.push(this.ifStatement());
+                            break;
+                        case TokenType.NUMBER:
+                            throw this.parseError("Unexpected number", nextToken);
+                    }
+
+
+                    if(!this.matchToken(TokenType.CLOSE_EXPR)) {
+                        throw new Error("Invalid Syntax");
+                    }
+                } break;
+            }
+        }
+
+        return nodes;
+    }
+
+    private parseError(msg: string, token?: Token): Error {
+        // make this better!
+        let details = "";
+
+        if(token) {
+            details = `at ${token.line}:${token.column}`;
+        }
+        return new Error(`${msg} ${details}`);
     }
 }
 
@@ -217,12 +503,13 @@ class TemplateEngine {
         const file = await fs.promises.readFile(filePath, { encoding: "utf8" });
         const contents = file.toString();
 
-        const parser = new Parser(contents);
+        const lexer = new Lexer(contents);
+        const parser = new Parser(lexer.scanTokens());
         const templateNodes = parser.parse();
         return (args) => this.compileNodes(templateNodes, args);
     }
 
-    private compileVariable(node: VarNode, args: TemplateViewArgs): string {
+    private getVariableValue(node: VarNode, args: TemplateViewArgs): any {
         let currentPath = "";
         let currentObj: any = args;
 
@@ -248,7 +535,7 @@ class TemplateEngine {
             if(currentObj[key] !== undefined) {
                 // if it's the last key we return it's value stringified
                 if(i === node.keys.length - 1) {
-                    return currentObj[key].toString();
+                    return currentObj[key];
                 } else {
                     currentObj = currentObj[key];
                 }
@@ -261,7 +548,49 @@ class TemplateEngine {
         return "undefined";
     }
 
-    private compileNodes(nodes: TemplateNode[], args: TemplateViewArgs): string {
+    private compileUnary(unary: UnaryNode, args: TemplateViewArgs): any {
+        let val: any;
+        switch(typeof(unary.value)) {
+            case "number":
+            case "string":
+                val = unary.value;
+                break;
+            default:
+                val = this.getVariableValue(unary.value, args);
+        }
+        return unary.negated ? !val : val;
+    }
+
+    private compileLogicExpr(logicExpr: LogicExpr, args: TemplateViewArgs): any {
+        if(logicExpr.type === NodeTypes.UNARY) {
+            return this.compileUnary(logicExpr, args);
+        } else if(logicExpr.type === NodeTypes.BINARY) {
+            const v1 = this.compileLogicExpr(logicExpr.left, args);
+            const v2 = this.compileLogicExpr(logicExpr.right, args);
+
+            switch(logicExpr.operator) {
+                case Operators.EQUAL: return v1 === v2;
+                case Operators.NOT_EQUAL: return v1 !== v2;
+                case Operators.GREATHER: return v1 > v2;
+                case Operators.LESS: return v1 < v2;
+                case Operators.GREATHER_OR_EQ: return v1 >= v2;
+                case Operators.LESS_OR_EQ: return v1 <= v2;
+                case Operators.AND: return v1 && v2;
+            }
+        }
+
+        return false;
+    }
+
+    private compileIf(node: IfNode, args: TemplateViewArgs): string {
+        if(this.compileLogicExpr(node.condition, args)) {
+            return this.compileNodes(node.nodes, args);
+        }
+
+        return "";
+    }
+
+    public compileNodes(nodes: TemplateNode[], args: TemplateViewArgs): string {
         let res = "";
         for(const node of nodes) {
             switch(node.type) {
@@ -269,7 +598,10 @@ class TemplateEngine {
                     res += node.contents;
                 } break;
                 case NodeTypes.VAR: {
-                    res += this.compileVariable(node, args);
+                    res += this.getVariableValue(node, args).toString();
+                } break;
+                case NodeTypes.IF: {
+                    res += this.compileIf(node, args);
                 } break;
             }
         }

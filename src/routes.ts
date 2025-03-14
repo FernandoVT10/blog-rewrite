@@ -8,10 +8,12 @@ router.get("/", (req, res) => {
     const $title = req.query.title || "Default Title";
     TemplateEngine.sendView(res, "home", {
         $title,
-        hello: "HELLO",
+        showMessage: true,
+        showSubMessage: true,
+        subMessage: "SUBMESSAGE!",
+        message: "showMessage is true",
         obj: {
-            message: "<h1>UwU</h1>",
-            array: ["hello", { msg: "message" }]
+            array: ["Hello", { msg: "World" }]
         }
     });
 });
