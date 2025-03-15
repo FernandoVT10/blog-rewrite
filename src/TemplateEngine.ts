@@ -1,6 +1,9 @@
 import fs from "fs";
 import { Response } from "express";
 
+import Lexer from "./TemplateEngine/Lexer";
+import { TokenType, Token } from "./TemplateEngine/types";
+
 enum NodeTypes {
     LITERAL, VAR, IF, UNARY, BINARY
 };
@@ -67,31 +70,6 @@ type TemplateView = (args: TemplateViewArgs) => string;
 // Spaces = " "+
 // Literal = !OpenExpr *
 
-enum TokenType {
-    LITERAL,
-    OPEN_EXPR, CLOSE_EXPR, // "{{" and "}}"
-    OPEN_BRACKET, CLOSE_BRACKET, // "[" and "]"
-    OPEN_PAREN, CLOSE_PAREN, // "(" and ")"
-    IDENTIFIER,
-    DOT,
-    NUMBER,
-    IF,
-    ENDIF,
-    BANG, // "!"
-    DOUBLE_EQUAL, BANG_EQUAL, // "==" and "!="
-    GREATHER, LESS, // ">" and "<"
-    GREATHER_OR_EQ, LESS_OR_EQ, // ">=" and "<="
-    STRING,
-    DOUBLE_AND, // "&&"
-};
-
-type Token = {
-    type: TokenType;
-    lexeme: string;
-    line: number;
-    column: number
-};
-
 const TokenAndOperators = new Map<TokenType, Operators>();
 TokenAndOperators.set(TokenType.DOUBLE_EQUAL, Operators.EQUAL);
 TokenAndOperators.set(TokenType.BANG_EQUAL, Operators.NOT_EQUAL);
@@ -100,176 +78,6 @@ TokenAndOperators.set(TokenType.LESS, Operators.LESS);
 TokenAndOperators.set(TokenType.GREATHER_OR_EQ, Operators.GREATHER_OR_EQ);
 TokenAndOperators.set(TokenType.LESS_OR_EQ, Operators.LESS_OR_EQ);
 TokenAndOperators.set(TokenType.DOUBLE_AND, Operators.AND);
-
-export class Lexer {
-    private buffer: string;
-    private cursor = 0;
-    private line = 0;
-    private column = 0;
-    private tokens: Token[] = [];
-    private keywords: Map<string, TokenType> = new Map;
-
-    constructor(buffer: string) {
-        this.buffer = buffer;
-        this.keywords.set("if", TokenType.IF);
-        this.keywords.set("endif", TokenType.ENDIF);
-    }
-
-    private isAtTheEnd(): boolean {
-        return this.cursor >= this.buffer.length;
-    }
-
-    private advance(): string {
-        this.column++;
-
-        if(this.buffer[this.cursor] == "\n") {
-            this.column = 0;
-            this.line = 0;
-        }
-
-        return this.buffer[this.cursor++];
-    }
-
-    private match(c: string): boolean {
-        if(this.peek() === c) {
-            this.advance();
-            return true;
-        }
-
-        return false;
-    }
-
-    private peek(): string {
-        return this.buffer[this.cursor];
-    }
-
-    private addToken(type: TokenType, lexeme = ""): void {
-        this.tokens.push({ type, lexeme, line: this.line, column: this.column });
-    }
-
-    private identifier(c: string): void {
-        let lexeme = c;
-        while(/[A-Za-z$_0-9]/.test(this.peek()))
-            lexeme += this.advance();
-
-        const type = this.keywords.get(lexeme);
-
-        if(type === undefined) {
-            this.addToken(TokenType.IDENTIFIER, lexeme);
-        } else {
-            this.addToken(type);
-        }
-    }
-
-    private number(c: string): void {
-        let lexeme = c;
-        while(/[0-9]/.test(this.peek()))
-            lexeme += this.advance();
-        this.addToken(TokenType.NUMBER, lexeme);
-    }
-
-    private string(): void {
-        let lexeme = "";
-        while(this.peek() !== '"' && !this.isAtTheEnd())
-            lexeme += this.advance();
-
-        if(!this.match('"')) {
-            throw new Error("Not closing string found");
-        }
-
-        this.addToken(TokenType.STRING, lexeme);
-    }
-
-    private scanExpr(): void {
-        while(this.peek() !== "}" && this.peek() !== "\n") {
-            const c = this.advance();
-
-            switch(c) {
-                case ".": this.addToken(TokenType.DOT); break;
-                case "[": this.addToken(TokenType.OPEN_BRACKET); break;
-                case "]": this.addToken(TokenType.CLOSE_BRACKET); break;
-                case "(": this.addToken(TokenType.OPEN_PAREN); break;
-                case ")": this.addToken(TokenType.CLOSE_PAREN); break;
-                case "!":
-                    this.addToken(this.match("=") ? TokenType.BANG_EQUAL : TokenType.BANG);
-                    break;
-                case "=":
-                    if(this.match("=")) {
-                        this.addToken(TokenType.DOUBLE_EQUAL);
-                    } else {
-                        throw new Error("Unexpected character");
-                    }
-
-                    break;
-                case ">":
-                    this.addToken(
-                        this.match("=") ? TokenType.GREATHER_OR_EQ : TokenType.GREATHER
-                    );
-                    break;
-                case "<":
-                    this.addToken(
-                        this.match("=") ? TokenType.LESS_OR_EQ : TokenType.LESS
-                    );
-                    break;
-                case "\"": this.string(); break;
-                case "&":
-                    if(this.match("&")) {
-                        this.addToken(TokenType.DOUBLE_AND);
-                    } else {
-                        throw new Error("Unexpected character");
-                    }
-                    break;
-                // ignore spaces
-                case " ": break;
-                default: {
-                    if(/[0-9]/.test(c)) {
-                        this.number(c);
-                    } else if(/[A-Za-z$_]/.test(c)) {
-                        this.identifier(c);
-                    } else {
-                        throw new Error("Unexpected character");
-                    }
-                }
-            }
-        }
-
-        if(this.match("}") && this.match("}")) {
-            this.addToken(TokenType.CLOSE_EXPR);
-        }
-    }
-
-    private scanLiteral(c: string): void {
-        let token: Token;
-        const len = this.tokens.length;
-        if(len > 0 && this.tokens[len - 1].type === TokenType.LITERAL) {
-            token = this.tokens[this.tokens.length - 1];
-        } else {
-            this.addToken(TokenType.LITERAL, "");
-            token = this.tokens[this.tokens.length - 1];
-        }
-
-        token.lexeme += c;
-
-        while(this.peek() !== "{" && !this.isAtTheEnd()) {
-            token.lexeme += this.advance();
-        }
-    }
-
-    public scanTokens(): Token[] {
-        while(!this.isAtTheEnd()) {
-            let c = this.advance();
-
-            if(c === "{" && this.match("{")) {
-                this.addToken(TokenType.OPEN_EXPR);
-                this.scanExpr();
-            } else {
-                this.scanLiteral(c);
-            }
-        }
-
-        return this.tokens;
-    }
-}
 
 export class Parser {
     private tokens: Token[];
@@ -288,14 +96,14 @@ export class Parser {
         return this.tokens[this.cursor++];
     }
 
-    private isNextToken(type: TokenType, offset = 0): boolean {
+    private isNext(type: TokenType, offset = 0): boolean {
         return this.tokens[this.cursor + offset].type === type;
     }
 
-    private matchToken(type: TokenType): boolean {
+    private match(type: TokenType): boolean {
         if(this.isAtTheEnd()) return false;
 
-        if(this.isNextToken(type)) {
+        if(this.isNext(type)) {
             this.advance();
             return true;
         }
@@ -303,7 +111,7 @@ export class Parser {
         return false;
     }
 
-    private peekToken(): Token {
+    private peek(): Token {
         return this.tokens[this.cursor];
     }
 
@@ -311,23 +119,23 @@ export class Parser {
         const keys: string[] = [];
         keys.push(this.advance().lexeme);
 
-        while(this.isNextToken(TokenType.DOT) || this.isNextToken(TokenType.OPEN_BRACKET)) {
+        while(this.isNext(TokenType.DOT) || this.isNext(TokenType.OPEN_BRACKET)) {
             const prevToken = this.advance();
 
             if(prevToken.type === TokenType.DOT) {
-                if(!this.isNextToken(TokenType.IDENTIFIER)) {
+                if(!this.isNext(TokenType.IDENTIFIER)) {
                     throw new Error("Invalid syntax");
                 }
 
                 keys.push(this.advance().lexeme);
             } else if(prevToken.type === TokenType.OPEN_BRACKET) {
-                if(!this.isNextToken(TokenType.NUMBER)) {
+                if(!this.isNext(TokenType.NUMBER)) {
                     throw this.parseError("Expected number", this.advance());
                 }
 
                 keys.push(this.advance().lexeme);
 
-                if(!this.matchToken(TokenType.CLOSE_BRACKET)) {
+                if(!this.match(TokenType.CLOSE_BRACKET)) {
                     throw new Error("Invalid syntax");
                 }
             } else {
@@ -344,15 +152,15 @@ export class Parser {
     private unary(): UnaryNode {
         let negated = false;
 
-        if(this.matchToken(TokenType.BANG)) {
+        if(this.match(TokenType.BANG)) {
             negated = true;
         }
 
         let value: UnaryNode["value"];
 
-        if(this.isNextToken(TokenType.NUMBER)) {
+        if(this.isNext(TokenType.NUMBER)) {
             value = parseInt(this.advance().lexeme);
-        } else if(this.isNextToken(TokenType.STRING)) {
+        } else if(this.isNext(TokenType.STRING)) {
             value = this.advance().lexeme;
         } else {
             value = this.variable();
@@ -380,7 +188,7 @@ export class Parser {
     private condition(): LogicExpr {
         let expr: LogicExpr = this.unary();
 
-        while(TokenAndOperators.has(this.peekToken().type)) {
+        while(TokenAndOperators.has(this.peek().type)) {
             expr = this.binary(expr);
         }
 
@@ -388,27 +196,27 @@ export class Parser {
     }
 
     private ifStatement(): IfNode {
-        this.matchToken(TokenType.IF);
+        this.match(TokenType.IF);
 
-        if(!this.matchToken(TokenType.OPEN_PAREN)) {
-            throw this.parseError(`Expected "("`, this.peekToken());
+        if(!this.match(TokenType.OPEN_PAREN)) {
+            throw this.parseError(`Expected "("`, this.peek());
         }
 
         const condition = this.condition();
 
-        if(!this.matchToken(TokenType.CLOSE_PAREN)) {
-            throw this.parseError(`Expected ")"`, this.peekToken());
+        if(!this.match(TokenType.CLOSE_PAREN)) {
+            throw this.parseError(`Expected ")"`, this.peek());
         }
 
-        if(!this.matchToken(TokenType.CLOSE_EXPR)) {
-            throw this.parseError(`Expected "}}"`, this.peekToken());
+        if(!this.match(TokenType.CLOSE_EXPR)) {
+            throw this.parseError(`Expected "}}"`, this.peek());
         }
 
         const nodes = this.parse(() => {
-            return !(this.isNextToken(TokenType.OPEN_EXPR) && this.isNextToken(TokenType.ENDIF, 1));
+            return !(this.isNext(TokenType.OPEN_EXPR) && this.isNext(TokenType.ENDIF, 1));
         });
 
-        if(!this.matchToken(TokenType.OPEN_EXPR) || !this.matchToken(TokenType.ENDIF)) {
+        if(!this.match(TokenType.OPEN_EXPR) || !this.match(TokenType.ENDIF)) {
             throw this.parseError("endif expected");
         }
 
@@ -437,9 +245,9 @@ export class Parser {
                     });
                 } break;
                 case TokenType.OPEN_EXPR: {
-                    const nextToken = this.peekToken();
+                    const nextToken = this.peek();
 
-                    switch(this.peekToken().type) {
+                    switch(this.peek().type) {
                         case TokenType.IDENTIFIER:
                             nodes.push(this.variable());
                             break;
@@ -450,8 +258,7 @@ export class Parser {
                             throw this.parseError("Unexpected number", nextToken);
                     }
 
-
-                    if(!this.matchToken(TokenType.CLOSE_EXPR)) {
+                    if(!this.match(TokenType.CLOSE_EXPR)) {
                         throw new Error("Invalid Syntax");
                     }
                 } break;
@@ -484,7 +291,16 @@ class TemplateEngine {
         console.info(`[INFO] Compiling views`);
         for(const [key, path] of Object.entries(opts.views)) {
             if(opts.debug) console.info(`[INFO] Compiling "${key}" view`);
-            this.views.set(key, await this.parseFile(path));
+            try {
+                const view = await this.parseFile(path);
+                this.views.set(key, view);
+            } catch(e) {
+                if(e instanceof Error) {
+                    console.log(e.message);
+                } else {
+                    console.error(e);
+                }
+            }
         }
     }
 
@@ -503,7 +319,7 @@ class TemplateEngine {
         const file = await fs.promises.readFile(filePath, { encoding: "utf8" });
         const contents = file.toString();
 
-        const lexer = new Lexer(contents);
+        const lexer = new Lexer(contents, filePath);
         const parser = new Parser(lexer.scanTokens());
         const templateNodes = parser.parse();
         return (args) => this.compileNodes(templateNodes, args);

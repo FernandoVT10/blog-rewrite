@@ -1,9 +1,10 @@
 import { expect, test, describe } from "vitest";
 
-import TemplateEngine, { Lexer, Parser } from "./TemplateEngine";
+import TemplateEngine, { Parser } from "./TemplateEngine";
+import Lexer from "./TemplateEngine/Lexer";
 
-const compileString = (str: string, args: any): string => {
-    const lexer = new Lexer(str);
+const compileString = (str: string, args?: any): string => {
+    const lexer = new Lexer(str, "./src/test.html");
     const parser = new Parser(lexer.scanTokens());
     return TemplateEngine.compileNodes(parser.parse(), args);
 };
@@ -11,6 +12,28 @@ const compileString = (str: string, args: any): string => {
 test("returns the same string if there's no expressions", () => {
     const template = "<h1></h1>";
     expect(compileString(template)).toBe(template);
+});
+
+describe("Lexer", () => {
+    test('should throw when terminating " is not found', () => {
+        const template = '{{ "foo }}';
+        expect(() => compileString(template)).toThrowError();
+    });
+
+    test("should throw when & is not followed by another &", () => {
+        const template = "{{ if(cond &= foo) }}";
+        expect(() => compileString(template)).toThrowError();
+    });
+
+    test("should throw when = is not followed by another =", () => {
+        const template = "{{ if(cond =$ foo) }}";
+        expect(() => compileString(template)).toThrowError();
+    });
+
+    test("should throw when a unsupported character is given", () => {
+        const template = "{{ if(cond * foo) }}";
+        expect(() => compileString(template)).toThrowError();
+    });
 });
 
 describe("Variable", () => {
