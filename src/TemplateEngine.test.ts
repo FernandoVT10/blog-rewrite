@@ -1,9 +1,11 @@
 import { expect, test, describe } from "vitest";
 
-import TemplateEngine, { Lexer, Parser } from "./TemplateEngine";
+import TemplateEngine from "./TemplateEngine";
+import Lexer from "./TemplateEngine/Lexer";
+import Parser from "./TemplateEngine/Parser";
 
-const compileString = (str: string, args: any): string => {
-    const lexer = new Lexer(str);
+const compileString = (str: string, args?: any): string => {
+    const lexer = new Lexer(str, "./src/test.html");
     const parser = new Parser(lexer.scanTokens());
     return TemplateEngine.compileNodes(parser.parse(), args);
 };
