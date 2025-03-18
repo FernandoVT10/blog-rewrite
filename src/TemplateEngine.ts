@@ -1,7 +1,6 @@
-import fs from "fs";
 import { Response } from "express";
+import Compiler from "./TemplateEngine/Compiler";
 
-import Lexer from "./TemplateEngine/Lexer";
 import { TokenType, Token } from "./TemplateEngine/types";
 
 enum NodeTypes {
@@ -273,7 +272,7 @@ export class Parser {
         let details = "";
 
         if(token) {
-            details = `at ${token.line}:${token.column}`;
+            details = `at line:${token.line} col:${token.col})`;
         }
         return new Error(`${msg} ${details}`);
     }
@@ -316,13 +315,22 @@ class TemplateEngine {
     }
 
     private async parseFile(filePath: string): Promise<TemplateView> {
-        const file = await fs.promises.readFile(filePath, { encoding: "utf8" });
-        const contents = file.toString();
-
-        const lexer = new Lexer(contents, filePath);
-        const parser = new Parser(lexer.scanTokens());
-        const templateNodes = parser.parse();
-        return (args) => this.compileNodes(templateNodes, args);
+        const compiler = new Compiler();
+        await compiler.compileFile(filePath);
+        // const file = await fs.promises.readFile(filePath, { encoding: "utf8" });
+        // const contents = file.toString();
+        //
+        // const lexer = new Lexer(contents, filePath);
+        // const tokens: Token[] = lexer.scanTokens();
+        // if(lexer.errors.length > 0) {
+        //     for(const e of lexer.errors) {
+        //         console.log(e.message);
+        //     }
+        // }
+        //
+        // const parser = new Parser(tokens);
+        // const templateNodes = parser.parse();
+        return (args) => this.compileNodes([], args);
     }
 
     private getVariableValue(node: VarNode, args: TemplateViewArgs): any {

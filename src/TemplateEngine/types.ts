@@ -20,5 +20,5 @@ export type Token = {
     type: TokenType;
     lexeme: string;
     line: number;
-    column: number
+    col: number
 };

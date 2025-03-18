@@ -1,29 +1,22 @@
+import Compiler from "./Compiler";
 import { TokenType, Token } from "./types";
-
-enum ANSIColor {
-    RED = "\x1b[31m",
-    BLUE = "\x1b[34m",
-    GRAY = "\x1b[90m",
-};
-
-function formatString(color: ANSIColor, msg: string): string {
-    return `${color}${msg}\x1b[0m`;
-}
 
 export default class Lexer {
     private buffer: string;
     private start = 0;
     private current = 0;
+    private colStart = 1;
+    private colCurrent = 1;
     private line = 1;
     private tokens: Token[] = [];
     private keywords: Map<string, TokenType> = new Map;
-    private filePath: string;
+    private compiler: Compiler;
 
-    constructor(buffer: string, filePath: string) {
+    constructor(buffer: string, compiler: Compiler) {
         this.buffer = buffer;
         this.keywords.set("if", TokenType.IF);
         this.keywords.set("endif", TokenType.ENDIF);
-        this.filePath = filePath;
+        this.compiler = compiler;
     }
 
     private isAtTheEnd(): boolean {
@@ -31,8 +24,11 @@ export default class Lexer {
     }
 
     private advance(): string {
+        this.colCurrent++;
         if(this.buffer[this.current] == "\n") {
             this.line++;
+            this.colStart = 1;
+            this.colCurrent = 1;
         }
 
         return this.buffer[this.current++];
@@ -55,8 +51,14 @@ export default class Lexer {
         if(lexeme === undefined) {
             lexeme = this.buffer.slice(this.start, this.current);
         }
-        this.tokens.push({ type, lexeme, line: this.line, column: this.start });
+        this.tokens.push({
+            type,
+            lexeme,
+            line: this.line,
+            col: this.colStart,
+        });
         this.start = this.current;
+        this.colStart = this.colCurrent;
     }
 
     private identifier(): void {
@@ -82,7 +84,7 @@ export default class Lexer {
             this.advance();
 
         if(!this.match('"')) {
-            throw this.lexingError('missing terminating " character');
+            this.error('Missing terminating " character', this.line, [this.colStart, this.colCurrent]);
         }
 
         const lexeme = this.buffer.slice(this.start + 1, this.current - 1);
@@ -90,7 +92,7 @@ export default class Lexer {
     }
 
     private scanExpr(): void {
-        while(this.peek() !== "}" && this.peek() !== "\n") {
+        while(this.peek() !== "}" && this.peek() !== "\n" && !this.isAtTheEnd()) {
             const c = this.advance();
 
             switch(c) {
@@ -106,10 +108,9 @@ export default class Lexer {
                     if(this.match("=")) {
                         this.addToken(TokenType.DOUBLE_EQUAL);
                     } else {
-                        this.start++;
-                        throw this.lexingError(`Expected character "="`, true);
+                        this.advance();
+                        this.error(`Expected character "="`, this.line, this.colCurrent - 1);
                     }
-
                     break;
                 case ">":
                     this.addToken(
@@ -126,13 +127,14 @@ export default class Lexer {
                     if(this.match("&")) {
                         this.addToken(TokenType.DOUBLE_AND);
                     } else {
-                        this.start++;
-                        throw this.lexingError(`Expected character "&"`, true);
+                        this.advance();
+                        this.error(`Expected character "&"`, this.line, this.colCurrent - 1);
                     }
                     break;
                 // ignore spaces
                 case " ":
                     this.start = this.current;
+                    this.colStart = this.colCurrent;
                     break;
                 default: {
                     if(/[0-9]/.test(c)) {
@@ -140,7 +142,7 @@ export default class Lexer {
                     } else if(/[A-Za-z$_]/.test(c)) {
                         this.identifier();
                     } else {
-                        throw this.lexingError(`Unexpected character`, true);
+                        this.error(`Unexpected character`, this.line, this.colCurrent - 1);
                     }
                 }
             }
@@ -156,48 +158,10 @@ export default class Lexer {
         this.addToken(TokenType.LITERAL);
     }
 
-    private lexingError(message: string, mode?: boolean): Error {
-        let start = this.start;
-        while(start > 0 && this.buffer[start - 1] !== '\n') start--;
-        let end = this.start;
-        while(end < this.buffer.length - 1 && this.buffer[end] !== '\n') end++;
-
-        const bufLine = this.buffer.slice(start, end);
-
-        let error = "";
-
-        const spaces = (n: number): string => "".padStart(n, " ");
-
-        // filepath:line
-        error += formatString(ANSIColor.RED, `${this.filePath}:${this.line}`) + "\n";
-
-        // ERROR: message
-        error += `${formatString(ANSIColor.RED, "ERROR:")} ${message}\n`;
-
-        const tokenStart = this.start - start;
-
-        // the line of code where the error is
-        if(mode) {
-            const left = bufLine.slice(0, tokenStart);
-            const highlightedCode = formatString(ANSIColor.RED, bufLine[tokenStart]);
-            const right = bufLine.slice(tokenStart + 1);
-            error += `${spaces(4)}${this.line} |${left}${highlightedCode}${right}\n`;
-        } else {
-            const code = bufLine.slice(0, tokenStart);
-            const highlightedCode = formatString(ANSIColor.RED, bufLine.slice(tokenStart));
-            error += `${spaces(4)}${this.line} |${code}${highlightedCode}\n`;
-        }
-
-        // A mark pointing the exact place where the error was found
-        const lineLen = this.line.toString().length;
-        const highlight = "".padEnd(bufLine.length - tokenStart - 1, "~");
-        error += `${spaces(4 + lineLen)} |${spaces(tokenStart)}${formatString(ANSIColor.RED, "^")}`;
-
-        if(!mode) {
-            error += formatString(ANSIColor.RED, highlight);
-        }
-
-        return new Error(error);
+    private error(message: string, line: number, col: number | number[]): void {
+        this.compiler.lexingError(message, line, col);
+        this.start = this.current;
+        this.colStart = this.colCurrent;
     }
 
     public scanTokens(): Token[] {
