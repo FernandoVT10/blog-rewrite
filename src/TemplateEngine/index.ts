@@ -1,5 +1,5 @@
 import { Response } from "express";
-import Compiler from "./TemplateEngine/Compiler";
+import Compiler from "./Compiler";
 
 import {
     VarNode,
@@ -8,11 +8,10 @@ import {
     NodeTypes,
     Operators,
     IfNode,
-    TemplateNode
-} from "./TemplateEngine/types";
-
-type TemplateViewArgs = any;
-type TemplateView = (args: TemplateViewArgs) => string;
+    TemplateNode,
+    View,
+    ViewArgs
+} from "./types";
 
 // FORMAL GRAMMAR
 // Expr = If | OpenExpr Variable CloseExpr
@@ -40,7 +39,7 @@ type InitOpts = {
 };
 
 class TemplateEngine {
-    private views: Map<string, TemplateView> = new Map;
+    private views: Map<string, View> = new Map;
 
     public async init(opts: InitOpts): Promise<void> {
         console.info(`[INFO] Compiling views`);
@@ -59,7 +58,7 @@ class TemplateEngine {
         }
     }
 
-    public sendView(res: Response, viewName: string, args: TemplateViewArgs): void {
+    public sendView(res: Response, viewName: string, args: ViewArgs): void {
         const view = this.views.get(viewName);
         if(!view) {
             console.error(`[ERROR] There is no view with name "${viewName}"`);
@@ -71,7 +70,7 @@ class TemplateEngine {
         res.send(view(args));
     }
 
-    private getVariableValue(node: VarNode, args: TemplateViewArgs): any {
+    private getVariableValue(node: VarNode, args: ViewArgs): any {
         let currentPath = "";
         let currentObj: any = args;
 
@@ -110,7 +109,7 @@ class TemplateEngine {
         return "undefined";
     }
 
-    private compileUnary(unary: UnaryNode, args: TemplateViewArgs): any {
+    private compileUnary(unary: UnaryNode, args: ViewArgs): any {
         let val: any;
         switch(typeof(unary.value)) {
             case "number":
@@ -123,7 +122,7 @@ class TemplateEngine {
         return unary.negated ? !val : val;
     }
 
-    private compileLogicExpr(logicExpr: LogicExpr, args: TemplateViewArgs): any {
+    private compileLogicExpr(logicExpr: LogicExpr, args: ViewArgs): any {
         if(logicExpr.type === NodeTypes.UNARY) {
             return this.compileUnary(logicExpr, args);
         } else if(logicExpr.type === NodeTypes.BINARY) {
@@ -144,7 +143,7 @@ class TemplateEngine {
         return false;
     }
 
-    private compileIf(node: IfNode, args: TemplateViewArgs): string {
+    private compileIf(node: IfNode, args: ViewArgs): string {
         if(this.compileLogicExpr(node.condition, args)) {
             return this.compileNodes(node.nodes, args);
         }
@@ -152,7 +151,7 @@ class TemplateEngine {
         return "";
     }
 
-    public compileNodes(nodes: TemplateNode[], args: TemplateViewArgs): string {
+    public compileNodes(nodes: TemplateNode[], args: ViewArgs): string {
         let res = "";
         for(const node of nodes) {
             switch(node.type) {

@@ -15,13 +15,13 @@ import {
     Operators
 } from "./types";
 
-enum ANSIColor {
+export enum ANSIColor {
     RED = "\x1b[31m",
     BLUE = "\x1b[34m",
     GRAY = "\x1b[90m",
 };
 
-function formatString(color: ANSIColor, msg: string): string {
+export function formatString(color: ANSIColor, msg: string): string {
     return `${color}${msg}\x1b[0m`;
 }
 
@@ -121,10 +121,23 @@ function compileNodes(nodes: TemplateNode[], args: ViewArgs): string {
     return res;
 }
 
+export type Logger = {
+    error: (msg: string) => void;
+};
+
 export default class Compiler {
     private buffer = "";
     private hadErrors = false;
     private filePath: string;
+    private logger: Logger;
+
+    constructor(logger?: Logger) {
+        if(logger) {
+            this.logger = logger;
+        } else {
+            this.logger = console;
+        }
+    }
 
     public async compileFile(filePath: string): Promise<View | null> {
         const file = await fs.promises.readFile(filePath, { encoding: "utf8" });
@@ -197,7 +210,7 @@ export default class Compiler {
         const errorMark = "^".padEnd(errorEnd - errorStart, "~");
         error += `${spaces(4 + lineLen)} |${spaces(errorStart)}${formatString(ANSIColor.RED, errorMark)}`;
 
-        console.log(error);
+        this.logger.error(error);
         this.hadErrors = true;
     }
 

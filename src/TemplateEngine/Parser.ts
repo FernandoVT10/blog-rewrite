@@ -153,7 +153,12 @@ export default class Parser {
         const condition = this.condition();
 
         if(!this.match(TokenType.CLOSE_PAREN)) {
-            this.error('Expected ")"');
+            if(!this.isNext(TokenType.CLOSE_EXPR)) {
+                this.error("Expected operator");
+                this.advance();
+            } else {
+                this.error('Expected ")"');
+            }
         }
 
         if(!this.match(TokenType.CLOSE_EXPR)) {
@@ -201,7 +206,7 @@ export default class Parser {
                             nodes.push(this.ifStatement());
                             break;
                         case TokenType.NUMBER:
-                            this.compiler.syntaxErrorToken("Unexpected number", this.advance());
+                            this.compiler.syntaxErrorToken("Expected identifier before number", this.advance());
                             continue;
                         case TokenType.CLOSE_EXPR:
                             this.error("Empty expression");
