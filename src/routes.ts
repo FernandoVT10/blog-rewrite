@@ -14,7 +14,8 @@ router.get("/", (req, res) => {
         message: "showMessage is true",
         obj: {
             array: ["Hello", { msg: "World" }]
-        }
+        },
+        strings: ["foo", "bar", "baz"],
     });
 });
 

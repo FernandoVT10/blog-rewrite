@@ -16,6 +16,9 @@ export default class Lexer {
         this.buffer = buffer;
         this.keywords.set("if", TokenType.IF);
         this.keywords.set("endif", TokenType.ENDIF);
+        this.keywords.set("for", TokenType.FOR);
+        this.keywords.set("endfor", TokenType.ENDFOR);
+        this.keywords.set("in", TokenType.IN);
         this.compiler = compiler;
     }
 
@@ -183,6 +186,8 @@ export default class Lexer {
                 this.scanLiteral();
             }
         }
+
+        this.addToken(TokenType.EOF);
 
         return this.tokens;
     }

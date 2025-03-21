@@ -6,13 +6,17 @@
     <body>
         <h1>Hello, World!</h1>
 
-        {{ if(showMessage) }}
-            {{ if(showSubMessage) }}
-                <p>{{ subMessage }}</p>
-            {{ endif }}
+        {{ for(string in strings) }}
+            <p>
+                {{string}}
+            </p>
+        {{ endfor }}
 
-            <p>{{ message }}</p>
+        {{ if(showSubMessage) }}
+            <p>{{ subMessage }}</p>
         {{ endif }}
+
+        <p>{{ message }}</p>
 
         <p>{{ obj.array[0] }}</p>
         <p>{{ obj.array[1].msg }}</p>

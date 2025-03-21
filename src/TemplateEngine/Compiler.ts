@@ -12,7 +12,8 @@ import {
     VarNode,
     IfNode,
     LogicExpr,
-    Operators
+    Operators,
+    ForNode
 } from "./types";
 
 export enum ANSIColor {
@@ -103,6 +104,28 @@ function compileIf(ifNode: IfNode, args: ViewArgs): string {
     return "";
 }
 
+function compileFor(forNode: ForNode, args: ViewArgs): string {
+    const array = getVarValue(forNode.arrayVar, args);
+
+    if(!array) return "";
+
+    if(!Array.isArray(array)) {
+        // TODO: improve this message
+        console.error(`[ERROR] given var is not an array`);
+        return "";
+    }
+
+    let res = "";
+
+    for(const item of array) {
+        res += compileNodes(
+            forNode.nodes, {...args, [forNode.itemName]: item }
+        );
+    }
+
+    return res;
+}
+
 function compileNodes(nodes: TemplateNode[], args: ViewArgs): string {
     let res = "";
     for(const node of nodes) {
@@ -115,6 +138,9 @@ function compileNodes(nodes: TemplateNode[], args: ViewArgs): string {
             } break;
             case NodeTypes.IF: {
                 res += compileIf(node, args);
+            } break;
+            case NodeTypes.FOR: {
+                res += compileFor(node, args);
             } break;
         }
     }
@@ -169,7 +195,7 @@ export default class Compiler {
 
         let end = start;
 
-        while(end < this.buffer.length - 1 && this.buffer[end] !== '\n') end++;
+        while(end < this.buffer.length && this.buffer[end] !== '\n') end++;
 
         return this.buffer.slice(start, end);
     }
@@ -199,7 +225,6 @@ export default class Compiler {
         }
 
         // the line of code where the error is
-
         const left = bufLine.slice(0, errorStart);
         const highlightedCode = formatString(ANSIColor.RED, bufLine.slice(errorStart, errorEnd));
         const right = bufLine.slice(errorEnd);

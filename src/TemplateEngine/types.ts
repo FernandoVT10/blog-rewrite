@@ -6,8 +6,7 @@ export enum TokenType {
     IDENTIFIER,
     DOT,
     NUMBER,
-    IF,
-    ENDIF,
+    IF, ENDIF,
     BANG, // "!"
     DOUBLE_EQUAL, BANG_EQUAL, // "==" and "!="
     GREATHER, LESS, // ">" and "<"
@@ -15,6 +14,8 @@ export enum TokenType {
     STRING,
     DOUBLE_AND, // "&&"
     OR, // "||"
+    FOR, ENDFOR, IN,
+    EOF,
 };
 
 export type Token = {
@@ -25,7 +26,7 @@ export type Token = {
 };
 
 export enum NodeTypes {
-    LITERAL, VAR, IF, UNARY, BINARY
+    LITERAL, VAR, IF, UNARY, BINARY, FOR
 };
 
 export type LiteralNode = {
@@ -65,7 +66,14 @@ export type IfNode = {
     nodes: TemplateNode[];
 };
 
-export type TemplateNode = LiteralNode | VarNode | IfNode;
+export type ForNode = {
+    type: NodeTypes.FOR;
+    arrayVar: VarNode;
+    itemName: string;
+    nodes: TemplateNode[];
+};
+
+export type TemplateNode = LiteralNode | VarNode | IfNode | ForNode;
 
 export const TokenAndOperators = new Map<TokenType, Operators>();
 TokenAndOperators.set(TokenType.DOUBLE_EQUAL, Operators.EQUAL);

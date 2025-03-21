@@ -10,7 +10,8 @@ import {
     TemplateNode,
     IfNode,
     Operators,
-    TokenAndOperators
+    TokenAndOperators,
+    ForNode
 } from "./types";
 
 export default class Parser {
@@ -24,7 +25,7 @@ export default class Parser {
     }
 
     private isAtTheEnd(): boolean {
-        return this.cursor >= this.tokens.length;
+        return this.peek().type === TokenType.EOF;
     }
 
     private advance(): Token {
@@ -56,37 +57,31 @@ export default class Parser {
         return this.tokens[pos];
     }
 
+    private consume(type: TokenType, message: string): Token {
+        if(!this.match(type)) {
+            throw this.errorAfter(this.prev(), message);
+        }
+
+        return this.prev();
+    }
+
     private variable(): VarNode {
         const keys: string[] = [];
 
-        if(!this.isNext(TokenType.IDENTIFIER)) {
-            this.error("Expected identifier");
-        }
+        const token = this.consume(TokenType.IDENTIFIER, "Expected variable name");
 
-        keys.push(this.advance().lexeme);
+        keys.push(token.lexeme);
 
         while(this.isNext(TokenType.DOT) || this.isNext(TokenType.OPEN_BRACKET)) {
             const prevToken = this.advance();
 
             if(prevToken.type === TokenType.DOT) {
-                if(!this.isNext(TokenType.IDENTIFIER)) {
-                    this.error("Expected identifier");
-                    break;
-                }
-
-                keys.push(this.advance().lexeme);
+                const tkn = this.consume(TokenType.IDENTIFIER, 'Expected property name after "."');
+                keys.push(tkn.lexeme);
             } else if(prevToken.type === TokenType.OPEN_BRACKET) {
-                if(!this.isNext(TokenType.NUMBER)) {
-                    this.error("Expected number");
-                    break;
-                }
-
-                keys.push(this.advance().lexeme);
-
-                if(!this.match(TokenType.CLOSE_BRACKET)) {
-                    this.error('Expected "]"');
-                    break;
-                }
+                const tkn = this.consume(TokenType.NUMBER, 'Expected array index after "["');
+                keys.push(tkn.lexeme);
+                this.consume(TokenType.CLOSE_BRACKET, 'Expected "]" after index');
             }
         }
 
@@ -96,6 +91,19 @@ export default class Parser {
         };
     }
 
+    private primary(): VarNode | string | number {
+        switch(this.peek().type) {
+            case TokenType.NUMBER:
+                return parseInt(this.advance().lexeme);
+            case TokenType.STRING:
+                return this.advance().lexeme;
+            case TokenType.IDENTIFIER:
+                return this.variable();
+        }
+
+        throw this.errorAfter(this.prev(), "Expected expression");
+    }
+
     private unary(): UnaryNode {
         let negated = false;
 
@@ -103,15 +111,7 @@ export default class Parser {
             negated = true;
         }
 
-        let value: UnaryNode["value"];
-
-        if(this.isNext(TokenType.NUMBER)) {
-            value = parseInt(this.advance().lexeme);
-        } else if(this.isNext(TokenType.STRING)) {
-            value = this.advance().lexeme;
-        } else {
-            value = this.variable();
-        }
+        const value = this.primary();
 
         return {
             type: NodeTypes.UNARY,
@@ -146,31 +146,26 @@ export default class Parser {
         this.match(TokenType.IF);
         const ifToken = this.prev();
 
-        if(!this.match(TokenType.OPEN_PAREN)) {
-            this.error('Expected "("');
-        }
+        this.consume(TokenType.OPEN_PAREN, 'Expected "(" after "if"');
 
         const condition = this.condition();
 
         if(!this.match(TokenType.CLOSE_PAREN)) {
             if(!this.isNext(TokenType.CLOSE_EXPR)) {
-                this.error("Expected operator");
-                this.advance();
+                throw this.errorAfter(this.prev(), "Expected operator after expression");
             } else {
-                this.error('Expected ")"');
+                throw this.errorAfter(this.prev(), 'Expected ")" after condition');
             }
         }
 
-        if(!this.match(TokenType.CLOSE_EXPR)) {
-            this.error('Expected "}}"');
-        }
+        this.consume(TokenType.CLOSE_EXPR, 'Expected "}}" after "if" statement');
 
         const nodes = this.parse(() => {
             return !(this.isNext(TokenType.OPEN_EXPR) && this.isNext(TokenType.ENDIF, 1));
         });
 
         if(!this.match(TokenType.OPEN_EXPR) || !this.match(TokenType.ENDIF)) {
-            this.compiler.syntaxErrorToken("Unterminated if", ifToken);
+            throw this.error(ifToken, "Unterminated if statement");
         }
 
         return {
@@ -178,6 +173,69 @@ export default class Parser {
             condition,
             nodes,
         };
+    }
+
+    private forStatement(): ForNode {
+        const forToken = this.advance();
+
+        this.consume(TokenType.OPEN_PAREN, 'Expected "(" after "for"');
+
+        const nameToken = this.consume(TokenType.IDENTIFIER, 'Expected declaration after "("');
+        const itemName = nameToken.lexeme;
+
+        this.consume(TokenType.IN, 'Expected "in" keyword after declaration');
+
+        if(!this.isNext(TokenType.IDENTIFIER)) {
+            throw this.errorAfter(this.prev(), 'Expected variable after "in"');
+        }
+
+        const arrayVar = this.variable();
+
+        this.consume(TokenType.CLOSE_PAREN, 'Expected ")" after expression');
+        this.consume(TokenType.CLOSE_EXPR, 'Expected "}}" after "for" statement');
+
+        const nodes = this.parse(() => {
+            return !(this.isNext(TokenType.OPEN_EXPR) && this.isNext(TokenType.ENDFOR, 1));
+        });
+
+        if(!this.match(TokenType.OPEN_EXPR) || !this.match(TokenType.ENDFOR)) {
+            throw this.error(forToken, "Unterminated for statement");
+        }
+
+        return {
+            type: NodeTypes.FOR,
+            arrayVar,
+            itemName,
+            nodes,
+        };
+    }
+
+    private parseExpr(): TemplateNode | null {
+        try {
+            switch(this.peek().type) {
+                case TokenType.IDENTIFIER: return this.variable();
+                case TokenType.IF: return this.ifStatement();
+                case TokenType.NUMBER:
+                    throw this.error(this.advance(), "Expected expression before number");
+                case TokenType.CLOSE_EXPR:
+                    this.error(this.advance(), "Invalid empty expression");
+                    return null;
+                case TokenType.FOR: return this.forStatement();
+            }
+        } catch {
+            while(!this.isAtTheEnd()) {
+                switch(this.peek().type) {
+                    case TokenType.OPEN_EXPR:
+                    case TokenType.CLOSE_EXPR:
+                    case TokenType.LITERAL:
+                        return null;
+                }
+
+                this.advance();
+            }
+        }
+
+        return null;
     }
 
     public parse(predicate?: () => boolean): TemplateNode[] {
@@ -198,23 +256,14 @@ export default class Parser {
                     });
                 } break;
                 case TokenType.OPEN_EXPR: {
-                    switch(this.peek().type) {
-                        case TokenType.IDENTIFIER:
-                            nodes.push(this.variable());
-                            break;
-                        case TokenType.IF:
-                            nodes.push(this.ifStatement());
-                            break;
-                        case TokenType.NUMBER:
-                            this.compiler.syntaxErrorToken("Expected identifier before number", this.advance());
-                            continue;
-                        case TokenType.CLOSE_EXPR:
-                            this.error("Empty expression");
-                            break;
-                    }
+                    const expr = this.parseExpr();
 
-                    if(!this.match(TokenType.CLOSE_EXPR)) {
-                        this.error('Expected "}}"');
+                    if(expr) {
+                        nodes.push(expr);
+
+                        if(!this.match(TokenType.CLOSE_EXPR)) {
+                            this.errorAfter(this.prev(), 'Expected closing "}}"');
+                        }
                     }
                 } break;
             }
@@ -223,9 +272,16 @@ export default class Parser {
         return nodes;
     }
 
-    private error(message: string): void {
-        const line = this.prev().line;
-        const col = this.prev().col[1];
+    private error(token: Token, message: string): Error {
+        this.compiler.syntaxError(message, token.line, token.col);
+        return new Error;
+    }
+
+    // sets the marker of the error after the token
+    private errorAfter(token: Token, message: string): Error {
+        const line = token.line;
+        const col = token.col[1];
         this.compiler.syntaxError(message, line, col);
+        return new Error;
     }
 }
