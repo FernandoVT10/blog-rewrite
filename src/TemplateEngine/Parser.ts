@@ -2,16 +2,17 @@ import Compiler from "./Compiler";
 import {
     Token,
     TokenType,
-    NodeTypes,
-    VarNode,
-    UnaryNode,
-    BinaryNode,
+    StmtTypes,
+    VarStmt,
+    UnaryExpr,
+    BinaryExpr,
     LogicExpr,
-    TemplateNode,
-    IfNode,
+    Stmt,
+    IfStmt,
+    ForStmt,
+    ExprTypes,
     Operators,
-    TokenAndOperators,
-    ForNode
+    TokenAndOperators
 } from "./types";
 
 export default class Parser {
@@ -65,7 +66,7 @@ export default class Parser {
         return this.prev();
     }
 
-    private variable(): VarNode {
+    private variable(): VarStmt {
         const keys: string[] = [];
 
         const token = this.consume(TokenType.IDENTIFIER, "Expected variable name");
@@ -86,12 +87,12 @@ export default class Parser {
         }
 
         return {
-            type: NodeTypes.VAR,
+            type: StmtTypes.VAR,
             keys,
         };
     }
 
-    private primary(): VarNode | string | number {
+    private primary(): VarStmt | string | number {
         switch(this.peek().type) {
             case TokenType.NUMBER:
                 return parseInt(this.advance().lexeme);
@@ -104,7 +105,7 @@ export default class Parser {
         throw this.errorAfter(this.prev(), "Expected expression");
     }
 
-    private unary(): UnaryNode {
+    private unary(): UnaryExpr {
         let negated = false;
 
         if(this.match(TokenType.BANG)) {
@@ -114,18 +115,18 @@ export default class Parser {
         const value = this.primary();
 
         return {
-            type: NodeTypes.UNARY,
+            type: ExprTypes.UNARY,
             value,
             negated,
         };
     }
 
-    private binary(left: LogicExpr): BinaryNode {
+    private binary(left: LogicExpr): BinaryExpr {
         const operator = TokenAndOperators.get(this.advance().type) as Operators;
         const right = this.unary();
 
         return {
-            type: NodeTypes.BINARY,
+            type: ExprTypes.BINARY,
             operator,
             left,
             right,
@@ -142,7 +143,7 @@ export default class Parser {
         return expr;
     }
 
-    private ifStatement(): IfNode {
+    private ifStatement(): IfStmt {
         this.match(TokenType.IF);
         const ifToken = this.prev();
 
@@ -160,7 +161,7 @@ export default class Parser {
 
         this.consume(TokenType.CLOSE_EXPR, 'Expected "}}" after "if" statement');
 
-        const nodes = this.parse(() => {
+        const stmts = this.parse(() => {
             return !(this.isNext(TokenType.OPEN_EXPR) && this.isNext(TokenType.ENDIF, 1));
         });
 
@@ -169,13 +170,13 @@ export default class Parser {
         }
 
         return {
-            type: NodeTypes.IF,
+            type: StmtTypes.IF,
             condition,
-            nodes,
+            stmts,
         };
     }
 
-    private forStatement(): ForNode {
+    private forStatement(): ForStmt {
         const forToken = this.advance();
 
         this.consume(TokenType.OPEN_PAREN, 'Expected "(" after "for"');
@@ -194,7 +195,7 @@ export default class Parser {
         this.consume(TokenType.CLOSE_PAREN, 'Expected ")" after expression');
         this.consume(TokenType.CLOSE_EXPR, 'Expected "}}" after "for" statement');
 
-        const nodes = this.parse(() => {
+        const stmts = this.parse(() => {
             return !(this.isNext(TokenType.OPEN_EXPR) && this.isNext(TokenType.ENDFOR, 1));
         });
 
@@ -203,14 +204,14 @@ export default class Parser {
         }
 
         return {
-            type: NodeTypes.FOR,
+            type: StmtTypes.FOR,
             arrayVar,
             itemName,
-            nodes,
+            stmts,
         };
     }
 
-    private parseExpr(): TemplateNode | null {
+    private parseStatement(): Stmt | null {
         try {
             switch(this.peek().type) {
                 case TokenType.IDENTIFIER: return this.variable();
@@ -238,28 +239,28 @@ export default class Parser {
         return null;
     }
 
-    public parse(predicate?: () => boolean): TemplateNode[] {
-        const nodes: TemplateNode[] = [];
+    public parse(predicate?: () => boolean): Stmt[] {
+        const statements: Stmt[] = [];
 
         while(!this.isAtTheEnd()) {
             if(predicate && !predicate()) {
-                return nodes;
+                return statements;
             }
 
             const token = this.advance();
 
             switch(token.type) {
                 case TokenType.LITERAL: {
-                    nodes.push({
-                        type: NodeTypes.LITERAL,
+                    statements.push({
+                        type: StmtTypes.LITERAL,
                         contents: token.lexeme,
                     });
                 } break;
                 case TokenType.OPEN_EXPR: {
-                    const expr = this.parseExpr();
+                    const stmt = this.parseStatement();
 
-                    if(expr) {
-                        nodes.push(expr);
+                    if(stmt) {
+                        statements.push(stmt);
 
                         if(!this.match(TokenType.CLOSE_EXPR)) {
                             this.errorAfter(this.prev(), 'Expected closing "}}"');
@@ -269,7 +270,7 @@ export default class Parser {
             }
         }
 
-        return nodes;
+        return statements;
     }
 
     private error(token: Token, message: string): Error {

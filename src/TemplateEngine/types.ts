@@ -25,24 +25,28 @@ export type Token = {
     col: [number, number];
 };
 
-export enum NodeTypes {
-    LITERAL, VAR, IF, UNARY, BINARY, FOR
+export enum StmtTypes {
+    LITERAL, IF, FOR, VAR,
 };
 
-export type LiteralNode = {
-    type: NodeTypes.LITERAL;
+export enum ExprTypes {
+    UNARY, BINARY,
+};
+
+export type Literal = {
+    type: StmtTypes.LITERAL;
     contents: string;
 };
 
-export type VarNode = {
-    type: NodeTypes.VAR;
+export type VarStmt = {
+    type: StmtTypes.VAR;
     // this stores all the indexes in order. "foo.bar[2]" will output ["foo", "bar", "2"]
     keys: string[];
 };
 
-export type UnaryNode = {
-    type: NodeTypes.UNARY;
-    value: VarNode | number | string;
+export type UnaryExpr = {
+    type: ExprTypes.UNARY;
+    value: VarStmt | number | string;
     negated: boolean;
 };
 
@@ -51,29 +55,29 @@ export enum Operators {
     GREATHER_OR_EQ, LESS_OR_EQ, AND, OR
 };
 
-export type BinaryNode = {
-    type: NodeTypes.BINARY;
+export type BinaryExpr = {
+    type: ExprTypes.BINARY;
     operator: Operators;
     left: LogicExpr;
     right: LogicExpr;
 };
 
-export type LogicExpr = UnaryNode | BinaryNode;
+export type LogicExpr = UnaryExpr | BinaryExpr;
 
-export type IfNode = {
-    type: NodeTypes.IF;
+export type IfStmt = {
+    type: StmtTypes.IF;
     condition: LogicExpr;
-    nodes: TemplateNode[];
+    stmts: Stmt[];
 };
 
-export type ForNode = {
-    type: NodeTypes.FOR;
-    arrayVar: VarNode;
+export type ForStmt = {
+    type: StmtTypes.FOR;
+    arrayVar: VarStmt;
     itemName: string;
-    nodes: TemplateNode[];
+    stmts: Stmt[];
 };
 
-export type TemplateNode = LiteralNode | VarNode | IfNode | ForNode;
+export type Stmt = IfStmt | ForStmt | Literal | VarStmt;
 
 export const TokenAndOperators = new Map<TokenType, Operators>();
 TokenAndOperators.set(TokenType.DOUBLE_EQUAL, Operators.EQUAL);

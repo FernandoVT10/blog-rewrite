@@ -7,13 +7,14 @@ import {
     Token,
     View,
     ViewArgs,
-    TemplateNode,
-    NodeTypes,
-    VarNode,
-    IfNode,
+    Stmt,
+    StmtTypes,
+    ExprTypes,
+    VarStmt,
+    IfStmt,
+    ForStmt,
     LogicExpr,
-    Operators,
-    ForNode
+    Operators
 } from "./types";
 
 export enum ANSIColor {
@@ -26,12 +27,12 @@ export function formatString(color: ANSIColor, msg: string): string {
     return `${color}${msg}\x1b[0m`;
 }
 
-function getVarValue(node: VarNode, args: ViewArgs): any {
+function getVarValue(stmt: VarStmt, args: ViewArgs): any {
     let currentPath = "";
     let currentObj: any = args;
 
-    for(let i = 0; i < node.keys.length; i++) {
-        const key = node.keys[i];
+    for(let i = 0; i < stmt.keys.length; i++) {
+        const key = stmt.keys[i];
 
         if(typeof currentObj !== "object") {
             console.error(`[ERROR] "${key}" can't be found in "${currentPath}"`);
@@ -51,7 +52,7 @@ function getVarValue(node: VarNode, args: ViewArgs): any {
 
         if(currentObj[key] !== undefined) {
             // if it's the last key we return it's value stringified
-            if(i === node.keys.length - 1) {
+            if(i === stmt.keys.length - 1) {
                 return currentObj[key];
             } else {
                 currentObj = currentObj[key];
@@ -66,7 +67,7 @@ function getVarValue(node: VarNode, args: ViewArgs): any {
 }
 
 function compileLogicExpr(logicExpr: LogicExpr, args: ViewArgs): any {
-    if(logicExpr.type === NodeTypes.UNARY) {
+    if(logicExpr.type === ExprTypes.UNARY) {
         let val: any;
         switch(typeof(logicExpr.value)) {
             case "number":
@@ -77,7 +78,7 @@ function compileLogicExpr(logicExpr: LogicExpr, args: ViewArgs): any {
                 val = getVarValue(logicExpr.value, args);
         }
         return logicExpr.negated ? !val : val;
-    } else if(logicExpr.type === NodeTypes.BINARY) {
+    } else if(logicExpr.type === ExprTypes.BINARY) {
         const v1 = compileLogicExpr(logicExpr.left, args);
         const v2 = compileLogicExpr(logicExpr.right, args);
 
@@ -96,16 +97,16 @@ function compileLogicExpr(logicExpr: LogicExpr, args: ViewArgs): any {
     return false;
 }
 
-function compileIf(ifNode: IfNode, args: ViewArgs): string {
-    if(compileLogicExpr(ifNode.condition, args)) {
-        return compileNodes(ifNode.nodes, args);
+function compileIf(ifStmt: IfStmt, args: ViewArgs): string {
+    if(compileLogicExpr(ifStmt.condition, args)) {
+        return compileStatements(ifStmt.stmts, args);
     }
 
     return "";
 }
 
-function compileFor(forNode: ForNode, args: ViewArgs): string {
-    const array = getVarValue(forNode.arrayVar, args);
+function compileFor(forStmt: ForStmt, args: ViewArgs): string {
+    const array = getVarValue(forStmt.arrayVar, args);
 
     if(!array) return "";
 
@@ -118,29 +119,29 @@ function compileFor(forNode: ForNode, args: ViewArgs): string {
     let res = "";
 
     for(const item of array) {
-        res += compileNodes(
-            forNode.nodes, {...args, [forNode.itemName]: item }
+        res += compileStatements(
+            forStmt.stmts, {...args, [forStmt.itemName]: item }
         );
     }
 
     return res;
 }
 
-function compileNodes(nodes: TemplateNode[], args: ViewArgs): string {
+function compileStatements(statements: Stmt[], args: ViewArgs): string {
     let res = "";
-    for(const node of nodes) {
-        switch(node.type) {
-            case NodeTypes.LITERAL: {
-                res += node.contents;
+    for(const stmt of statements) {
+        switch(stmt.type) {
+            case StmtTypes.LITERAL: {
+                res += stmt.contents;
             } break;
-            case NodeTypes.VAR: {
-                res += String(getVarValue(node, args));
+            case StmtTypes.VAR: {
+                res += String(getVarValue(stmt, args));
             } break;
-            case NodeTypes.IF: {
-                res += compileIf(node, args);
+            case StmtTypes.IF: {
+                res += compileIf(stmt, args);
             } break;
-            case NodeTypes.FOR: {
-                res += compileFor(node, args);
+            case StmtTypes.FOR: {
+                res += compileFor(stmt, args);
             } break;
         }
     }
@@ -174,13 +175,13 @@ export default class Compiler {
         const tokens = lexer.scanTokens();
 
         const parser = new Parser(tokens, this);
-        const nodes = parser.parse();
+        const statements = parser.parse();
 
         if(this.hadErrors) {
             return null;
         }
 
-        return (args: ViewArgs) => compileNodes(nodes, args);
+        return (args: ViewArgs) => compileStatements(statements, args);
     }
 
     private getBufLine(line: number): string {
