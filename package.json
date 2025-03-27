@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon ./src/main.ts",
+    "dev": "node ./scripts/dev.js",
     "test": "vitest"
   },
   "keywords": [],
@@ -13,6 +13,9 @@
   "packageManager": "pnpm@10.6.3",
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "chokidar": "^4.0.3",
+    "esbuild": "^0.25.1",
+    "livereload": "^0.9.3",
     "nodemon": "^3.1.9",
     "sass": "^1.85.1",
     "ts-node": "^10.9.2",
@@ -20,6 +23,7 @@
     "vitest": "^3.0.8"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "snabbdom": "^3.6.2"
   }
 }

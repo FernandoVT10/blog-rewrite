@@ -1,0 +1,57 @@
+:root {
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    color-scheme: dark;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+
+    --hsl-black-lighter-2: 225, 10%, 20%;
+    --hsl-black-lighter: 230, 15%, 15%;
+    --hsl-black-light: 235, 20%, 10%;
+    --hsl-black: 240, 30%, 5%;
+
+    --hsl-white: 245, 50%, 91%;
+    --hsl-white-dark: 235, 40%, 75%;
+    --hsl-white-darker: 234 17% 55%;
+
+    --hsl-blue-light: 221, 91%, 85%;
+    --hsl-blue: 221, 91%, 75%;
+    --hsl-blue-darker: 221, 70%, 35%;
+    --hsl-blue-darker-2: 221, 70%, 30%;
+
+    --hsl-green: 170, 15.7%, 63.7%;
+
+    --hsl-red: 343, 81.2%, 74.9%;
+    --hsl-red-dark: 343, 75%, 35%;
+    --hsl-red-darker: 343, 75%, 30%;
+
+    --fz-12: 12px;
+    --fz-14: 14px;
+    --fz-16: 16px;
+    --fz-20: 20px;
+    --fz-25: 25px;
+    --fz-35: 35px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: hsl(var(--hsl-black));
+    font-size: var(--fz-16);
+    color: hsl(var(--hsl-white));
+    margin: 0;
+}
+
+h1, h2, h3, p {
+    margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

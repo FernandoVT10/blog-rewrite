@@ -1,24 +1,107 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>{{ $title }}</title>
+        <title>Fernando Vaca Tamayo</title>
+        <link rel="stylesheet" href="/build/main.css"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <script src="/build/js/helloWorld.js" defer></script>
+        {{ if(DEVELOPMENT) }}
+            <script src="http://localhost:35729/livereload.js"></script>
+        {{ endif }}
     </head>
     <body>
-        <h1>Hello, World!</h1>
+        <header class="home-header">
+            <h1 class="home-header__full-name">Fernando Vaca Tamayo</h1>
+            <hr class="home-header__separator"/>
 
-        {{ for(string in strings) }}
-            <p>
-                {{string}}
+            <p class="home-header__description">
+                Hi, I'm a Javascript full stack developer.
+                I like video games, anime, music, and trying to find the
+                best way to write the cleanest and best code.
             </p>
-        {{ endfor }}
 
-        {{ if(showSubMessage) }}
-            <p>{{ subMessage }}</p>
-        {{ endif }}
+            <ul class="home-header__media-list">
+                <li class="home-header__media-item">
+                    <a
+                        target="_blank"
+                        href="https://twitter.com/FernandoVT10"
+                        class="home-header__media-link"
+                    >
+                        <svg><use href="/icons.svg#twitter"/></svg>
+                    </a>
+                </li>
 
-        <p>{{ message }}</p>
+                <li class="home-header__media-item">
+                    <a
+                        target="_blank"
+                        href="https://github.com/FernandoVT10"
+                        class="home-header__media-link"
+                    >
+                        <svg><use href="/icons.svg#github"/></svg>
+                    </a>
+                </li>
 
-        <p>{{ obj.array[0] }}</p>
-        <p>{{ obj.array[1].msg }}</p>
+                <li class="home-header__media-item">
+                    <a
+                        target="_blank"
+                        href="https://github.com/FernandoVT10"
+                        class="home-header__media-link"
+                    >
+                        <svg><use href="/icons.svg#linkedin"/></svg>
+                    </a>
+                </li>
+            </ul>
+        </header>
+
+        <section class="page-wrapper">
+            <section class="presentation-cards-section">
+                <article class="presentation-card">
+                    <svg class="presentation-card__icon"><use href="/icons.svg#code"/></svg>
+                    <h2 class="presentation-card__title">Technologies</h2>
+                    <p class="presentation-card__description">
+                        I can use <span>React.js</span>, <span>Node.js</span>, <span>Typescript</span>,
+                        <span>HTML/CSS</span>, <span>SQL/NoSQL</span>, <span>Linux</span>,
+                        <span>Python</span>, <span>C</span> and more.
+                    </p>
+                </article>
+                <article class="presentation-card">
+                    <svg class="presentation-card__icon"><use href="/icons.svg#world"/></svg>
+                    <h2 class="presentation-card__title">Languages</h2>
+                    <p class="presentation-card__description">
+                        Spanish is my native language, and I have a B1 level of English.
+                    </p>
+                </article>
+                <article class="presentation-card">
+                    <svg class="presentation-card__icon"><use href="/icons.svg#stack"/></svg>
+                    <h2 class="presentation-card__title">Projects</h2>
+                    <p class="presentation-card__description">
+                        You can click <a href="/projects" class="presentation-card__link">here</a> to see my projects.
+                    </p>
+                </article>
+            </section>
+
+            <h2 class="section-title">Posts from my blog</h3>
+
+            <section class="blog-posts-cards">
+                {{for(blogPost in blogPosts)}}
+                <article class="blog-post-card">
+                    <a href="/blog/posts/{{blogPost.id}}">
+                        <div class="blog-post-card__cover">
+                            <img
+                                class="blog-post-card__cover-image"
+                                src="{{blogPost.cover}}"
+                                alt="Blog Post Cover"
+                            />
+                        </div>
+
+                        <h3 class="blog-post-card__title">{{blogPost.title}}</h3>
+                    </a>
+                </article>
+                {{endfor}}
+            </section>
+        </section>
+
+        <div id="container"></div>
     </body>
 </html>

@@ -29,10 +29,12 @@ import {
 type InitOpts = {
     views: Record<string, string>;
     debug?: boolean;
+    globalArgs?: Record<any, any>; // these arguments will be added to all the views
 };
 
 class TemplateEngine {
     private views: Map<string, View> = new Map;
+    private globalArgs: InitOpts["globalArgs"];
 
     public async init(opts: InitOpts): Promise<void> {
         console.info(`[INFO] Compiling views`);
@@ -49,14 +51,20 @@ class TemplateEngine {
                 console.log(e);
             }
         }
+
+        this.globalArgs = opts.globalArgs;
     }
 
-    public sendView(res: Response, viewName: string, args: ViewArgs): void {
+    public sendView(res: Response, viewName: string, args?: ViewArgs): void {
         const view = this.views.get(viewName);
         if(!view) {
             console.error(`[ERROR] There is no view with name "${viewName}"`);
             res.sendStatus(400);
             return;
+        }
+
+        if(this.globalArgs) {
+            Object.assign(args, this.globalArgs);
         }
 
         res.setHeader("Content-Type", "text/html");

@@ -4,19 +4,16 @@ import TemplateEngine from "./TemplateEngine";
 
 const router = Router();
 
-router.get("/", (req, res) => {
-    const $title = req.query.title || "Default Title";
-    TemplateEngine.sendView(res, "home", {
-        $title,
-        showMessage: false,
-        showSubMessage: true,
-        subMessage: "SUBMESSAGE!",
-        message: "showMessage is true",
-        obj: {
-            array: ["Hello", { msg: "World" }]
-        },
-        strings: ["foo", "bar", "baz"],
-    });
+const blogPosts = [
+    {
+        id: 1,
+        cover: "https://fvtblog.com/assets/covers/blog/4763-1733785494372.webp",
+        title: "Test Card",
+    },
+];
+
+router.get("/", (_, res) => {
+    TemplateEngine.sendView(res, "home", { blogPosts });
 });
 
 export default router;
