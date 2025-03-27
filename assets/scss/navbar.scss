@@ -1,13 +1,37 @@
 @use "./variables" as *;
 
 .navbar {
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: relative;
     width: 100%;
-    z-index: 100;
+    background-image: url(/images/navbar-bg.webp);
+    background-repeat: repeat-x;
+    background-size: cover cover;
+
+    &--home {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background: none;
+        z-index: 100;
+
+        &:before {
+            display: none;
+        }
+    }
+
+    &:before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: hsla(var(--hsl-black), 0.8);
+        background: linear-gradient(hsla(var(--hsl-black), 0.6), hsla(var(--hsl-black), 0.8));
+    }
 
     &__container {
+        position: relative;
         width: 100%;
         max-width: 1200px;
         display: flex;
@@ -15,6 +39,18 @@
         align-items: center;
         padding: 10px;
         margin: auto;
+        z-index: 2;
+    }
+
+    &__icon-container {
+        display: flex;
+        align-items: center;
+    }
+
+    &__link-title {
+        display: inline-block;
+        font-size: var(--fz-20);
+        margin-left: 10px;
     }
 
     &__link-list {

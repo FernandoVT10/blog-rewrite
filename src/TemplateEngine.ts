@@ -6,7 +6,7 @@ import Handlebars, { TemplateDelegate } from "handlebars";
 import { DEVELOPMENT } from "./constants";
 
 export enum Views {
-    HOME,
+    HOME, BLOG,
 };
 
 type SendViewOpts = {
@@ -48,6 +48,7 @@ class TemplateEngine {
     public async init() {
         const viewsDir = path.resolve(__dirname, "./views/");
         await this.compileView(Views.HOME, path.resolve(viewsDir, "home.html"));
+        await this.compileView(Views.BLOG, path.resolve(viewsDir, "blog.html"));
 
         const layoutPath = path.resolve(viewsDir, "layout/base.html");
         console.info(`[INFO] Compiling layout: "${layoutPath}"`);

@@ -1,0 +1,45 @@
+<nav class="navbar">
+    <div class="navbar__container">
+        <a class="navbar__icon-container" href="/">
+            <img src="/icon.svg" alt="Icon" width="30" height="30"/>
+            <h1 class="navbar__link-title">Blog</h1>
+        </a>
+
+        <ul class="navbar__link-list">
+            <li class="navbar__link-item">
+                <a href="/">Home</a>
+            </li>
+
+            <li class="navbar__link-item">
+                <a href="/blog">Blog</a>
+            </li>
+
+            <li class="navbar__link-item">
+                <a href="/projects">Projects</a>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<section class="page-wrapper">
+    {{#each blogPosts}}
+    <a href="/blog/posts/{{this.id}}">
+        <article class="blog-post-large-card">
+            <img
+                class="blog-post-large-card__cover"
+                src="{{this.cover}}"
+                alt="Blog Post Cover"
+            />
+
+            <div class="blog-post-large-card__details">
+                <h3 class="blog-post-large-card__title">{{this.title}}</h3>
+
+                <div class="blog-post-large-card__date">
+                    <svg><use href="/icons.svg#clock"/></svg>
+                    <span>19 days ago</span>
+                </div>
+            </div>
+        </article>
+    </a>
+    {{/each}}
+</section>

@@ -31,5 +31,10 @@
             <path d="M4 12l8 4l8 -4" />
             <path d="M4 16l8 4l8 -4" />
         </symbol>
+        <symbol id="clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3">
+            <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+            <path d="M12 12h3.5" />
+            <path d="M12 7v5" />
+        </symbol>
     </defs>
 </svg>

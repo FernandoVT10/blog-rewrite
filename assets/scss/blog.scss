@@ -1,0 +1,56 @@
+.blog-post-large-card {
+    $cover-height: 300px;
+    position: relative;
+    height: $cover-height;
+    margin: 40px 0;
+    position: relative;
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: 0px 0px 2px hsl(var(--hsl-blue));
+    border: solid 2px transparent;
+    transition: border .3s;
+
+    &:before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, .4);
+    }
+
+    &:hover {
+        border-color: hsl(var(--hsl-blue));
+    }
+
+    &__cover {
+        width: 100%;
+        height: $cover-height;
+        object-fit: cover;
+    }
+
+    &__details {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+    }
+
+    &__title {
+        font-weight: bold;
+        font-size: var(--fz-20);
+    }
+
+    &__date {
+        color: hsl(var(--hsl-blue));
+        font-weight: bold;
+        font-size: var(--fz-12);
+
+
+        & > svg {
+            width: 16px;
+            height: 16px;
+            margin-bottom: -3px;
+        }
+    }
+}
