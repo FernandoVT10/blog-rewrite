@@ -18,7 +18,9 @@ function spawnTSNode() {
 function handleServer() {
     console.log("Running ts-node ./src/main.ts");
     let serverChild = spawnTSNode();
-    chokidar.watch(srcDir).on("change", () => {
+    chokidar.watch(srcDir, {
+        ignored: (file) => file.endsWith(".html"),
+    }).on("change", () => {
         console.log("Re-running ts-node ./src/main.ts");
         if(!serverChild.killed) serverChild.kill();
         serverChild = spawnTSNode();
@@ -96,10 +98,11 @@ async function handleScripts() {
 
 function startLiveReload() {
     const liveServer = livereload.createServer({
-        exts: ["css", "js"],
+        exts: ["css", "js", "html"],
     });
     const publicDir = path.resolve(rootDir, "./public");
-    liveServer.watch([publicDir]);
+    const viewsDir = path.resolve(rootDir, "./src/views");
+    liveServer.watch([publicDir, viewsDir]);
     console.log("Livereload server started");
 }
 

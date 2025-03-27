@@ -1,6 +1,5 @@
 import { Router } from "express";
-
-import TemplateEngine from "./TemplateEngine";
+import TemplateEngine, { Views } from "./TemplateEngine";
 
 const router = Router();
 
@@ -13,7 +12,11 @@ const blogPosts = [
 ];
 
 router.get("/", (_, res) => {
-    TemplateEngine.sendView(res, "home", { blogPosts });
+    TemplateEngine.sendView(res, {
+        view: Views.HOME,
+        viewArgs: { blogPosts },
+        layoutArgs: { title: "Fernando Vaca Tamayo" },
+    });
 });
 
 export default router;

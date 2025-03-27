@@ -1,0 +1,33 @@
+@use "./variables" as *;
+
+.navbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+
+    &__container {
+        width: 100%;
+        max-width: 1200px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        margin: auto;
+    }
+
+    &__link-list {
+        list-style: none;
+        display: flex;
+        column-gap: 20px;
+    }
+
+    &__link-item {
+        display: inline-block;
+
+        & > a:hover {
+            color: hsl(var(--hsl-blue));
+        }
+    }
+}
